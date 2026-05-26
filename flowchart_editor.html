@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>업무 프로세스 플로우차트 편집기</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --panel: #ffffff;
+      --line: #d6deeb;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --primary: #2563eb;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Pretendard", "Pretendard Variable", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .app {
+      max-width: 1240px;
+      margin: 18px auto;
+      padding: 0 12px 18px;
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+    .workspace {
+      padding: 14px;
+      position: relative;
+      min-height: 780px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    button:hover { filter: brightness(0.98); }
+    .hint { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+    .canvas {
+      position: relative;
+      min-height: 700px;
+      border-radius: 12px;
+      border: 1px dashed #c9d4e6;
+      background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+      overflow: hidden;
+    }
+    svg.links {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .nodes {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+    }
+
+    .node {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 180px;
+      min-height: 92px;
+      padding: 10px 12px;
+      border: 2px solid #94a3b8;
+      border-radius: 14px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      gap: 4px;
+      cursor: pointer;
+      transition: box-shadow .18s ease, transform .18s ease;
+      white-space: pre-line;
+    }
+    .node:hover { box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+    .node.selected {
+      box-shadow: 0 0 0 3px rgba(37,99,235,.25);
+      transform: translate(-50%, -50%) scale(1.02);
+    }
+    .node .title { font-size: 14px; font-weight: 700; line-height: 1.35; }
+    .node .desc { font-size: 12px; color: #334155; line-height: 1.35; }
+    .node .owner { font-size: 11px; color: #475569; font-weight: 600; }
+
+    .node.start { border-radius: 999px; min-height: 70px; }
+    .node.end { border-radius: 999px; min-height: 62px; }
+    .node.decision {
+      width: 170px;
+      height: 170px;
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    .node.decision .diamond {
+      width: 100%;
+      height: 100%;
+      transform: rotate(45deg);
+      border-radius: 14px;
+      border: 2px solid #64748b;
+      background: #fff;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    .node.decision .content {
+      position: absolute;
+      inset: 18px;
+      transform: rotate(0deg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 2;
+      white-space: pre-line;
+    }
+
+    .panel { padding: 16px; }
+    .panel h2 { margin: 0 0 12px; font-size: 17px; }
+    .empty { padding: 16px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 13px; }
+    .field { margin-bottom: 10px; }
+    .field label { display: block; margin-bottom: 5px; font-size: 12px; color: #334155; font-weight: 600; }
+    .field input, .field textarea, .field select {
+      width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 13px;
+      font-family: inherit;
+    }
+    .field textarea { min-height: 72px; resize: vertical; }
+
+    .legend {
+      margin-top: 12px;
+      padding: 10px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 12px;
+    }
+    .legend-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+    .lg { display: flex; align-items: center; gap: 6px; color: #334155; }
+    .dot { width: 12px; height: 12px; border-radius: 999px; border: 1px solid rgba(0,0,0,.15); }
+
+    .toast {
+      position: fixed;
+      right: 20px;
+      top: 20px;
+      background: #111827;
+      color: #fff;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: all .22s ease;
+      pointer-events: none;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 980px) {
+      .app { grid-template-columns: 1fr; }
+      .workspace { min-height: 680px; }
+      .hint { width: 100%; margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <section class="card workspace" id="printArea">
+      <div class="toolbar">
+        <button class="primary" id="btnSave">저장</button>
+        <button id="btnLoad">불러오기</button>
+        <button id="btnReset">초기화</button>
+        <button id="btnDownload">PNG 다운로드</button>
+        <button id="btnPrint">인쇄</button>
+        <span class="hint">도형을 클릭해 우측 패널에서 텍스트/테마를 수정하세요.</span>
+      </div>
+      <div class="canvas" id="canvas">
+        <svg class="links" id="linkSvg" viewBox="0 0 1000 700" preserveAspectRatio="none">
+          <defs>
+            <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="#64748b"></path>
+            </marker>
+          </defs>
+        </svg>
+        <div class="nodes" id="nodes"></div>
+      </div>
+      <div class="legend">
+        <strong>범례</strong>
+        <div class="legend-grid" id="legend"></div>
+      </div>
+    </section>
+
+    <aside class="card panel">
+      <h2>도형 편집 패널</h2>
+      <div id="editorEmpty" class="empty">도형을 선택하세요.</div>
+      <div id="editorForm" style="display:none;">
+        <div class="field"><label>제목</label><input id="fTitle" /></div>
+        <div class="field"><label>설명</label><textarea id="fDesc"></textarea></div>
+        <div class="field"><label>담당자</label><input id="fOwner" /></div>
+        <div class="field">
+          <label>테마</label>
+          <select id="fTheme"></select>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <div class="toast" id="toast">저장되었습니다.</div>
+
+  <script>
+    const STORAGE_KEY = 'workflow_flowchart_v1';
+    const themes = {
+      crm: { name: 'CRM팀', bg: '#e8f0ff', border: '#2f6fec', title: '#1744a5' },
+      h2o: { name: 'H2O', bg: '#ffece6', border: '#df4d22', title: '#9f2f13' },
+      ops: { name: '운영팀/네오싸이언', bg: '#eaf9ef', border: '#2a9b57', title: '#18673a' },
+      high: { name: '고도화', bg: '#f2eaff', border: '#7a3fd1', title: '#4c1d95' },
+      done: { name: '종료', bg: '#eef2f7', border: '#64748b', title: '#334155' },
+      base: { name: '기본', bg: '#f8fafc', border: '#64748b', title: '#1f2937' }
+    };
+
+    const defaults = {
+      nodes: [
+        { id:'n1', type:'start', x:8, y:50, title:'오류 / 개선\n업무 발생', desc:'요청 접수', owner:'', theme:'base' },
+        { id:'n2', type:'task', x:22, y:50, title:'CRM팀 검토 및 판단', desc:'기존 오류 vs 기능 개선 구분', owner:'CRM팀', theme:'crm' },
+        { id:'n3', type:'decision', x:38, y:50, title:'오류인가?\n개선인가?', desc:'분기 판단', owner:'', theme:'crm' },
+
+        { id:'n4', type:'task', x:53, y:30, title:'H2O 확인', desc:'접수 내용 확인', owner:'이상칼 PM', theme:'h2o' },
+        { id:'n5', type:'decision', x:66, y:30, title:'H2O 담당?', desc:'담당 주체 판단', owner:'', theme:'h2o' },
+        { id:'n6', type:'task', x:81, y:20, title:'H2O 자체 처리', desc:'내부 처리', owner:'이상칼 PM', theme:'h2o' },
+        { id:'n7', type:'task', x:81, y:40, title:'운영팀 처리', desc:'운영 이관 처리', owner:'이상탁 M', theme:'ops' },
+
+        { id:'n8', type:'task', x:53, y:68, title:'ITO 검토', desc:'개선 요청 검토', owner:'이광석 PM, 이성탁 M', theme:'ops' },
+        { id:'n9', type:'decision', x:66, y:68, title:'고도화 범위?', desc:'고도화 필요 여부', owner:'', theme:'high' },
+        { id:'n10', type:'task', x:81, y:60, title:'고도화 이관', desc:'개발 조직 이관', owner:'김진왕 PM', theme:'high' },
+
+        { id:'n11', type:'end', x:94, y:20, title:'처리 완료', desc:'(H2O)', owner:'', theme:'done' },
+        { id:'n12', type:'end', x:94, y:40, title:'처리 완료', desc:'(운영팀)', owner:'', theme:'done' },
+        { id:'n13', type:'end', x:94, y:60, title:'처리 완료', desc:'(고도화)', owner:'', theme:'done' }
+      ],
+      edges: [
+        { from:'n1', to:'n2' },
+        { from:'n2', to:'n3' },
+        { from:'n3', to:'n4', label:'기존 오류' },
+        { from:'n3', to:'n8', label:'기능 개선' },
+        { from:'n4', to:'n5' },
+        { from:'n5', to:'n6', label:'예' },
+        { from:'n5', to:'n7', label:'아니오' },
+        { from:'n6', to:'n11' },
+        { from:'n7', to:'n12' },
+        { from:'n8', to:'n9' },
+        { from:'n9', to:'n10', label:'예' },
+        { from:'n10', to:'n13' }
+      ]
+    };
+
+    let data = JSON.parse(JSON.stringify(defaults));
+    let selectedId = null;
+
+    const nodesEl = document.getElementById('nodes');
+    const svgEl = document.getElementById('linkSvg');
+
+    function renderLegend() {
+      const legend = document.getElementById('legend');
+      legend.innerHTML = Object.entries(themes).filter(([k]) => k !== 'base').map(([, t]) =>
+        `<div class="lg"><span class="dot" style="background:${t.bg};border-color:${t.border}"></span>${t.name}</div>`
+      ).join('');
+    }
+
+    function getTheme(themeKey) { return themes[themeKey] || themes.base; }
+
+    function renderNodes() {
+      nodesEl.innerHTML = '';
+      data.nodes.forEach(node => {
+        const theme = getTheme(node.theme);
+        const el = document.createElement('div');
+        el.className = `node ${node.type} ${selectedId === node.id ? 'selected' : ''}`;
+        el.dataset.id = node.id;
+        el.style.left = `${node.x}%`;
+        el.style.top = `${node.y}%`;
+
+        if (node.type === 'decision') {
+          el.innerHTML = `<div class="diamond"></div>
+            <div class="content">
+              <div class="title">${node.title || ''}</div>
+              <div class="desc">${node.desc || ''}</div>
+              <div class="owner">${node.owner || ''}</div>
+            </div>`;
+          el.querySelector('.diamond').style.background = theme.bg;
+          el.querySelector('.diamond').style.borderColor = theme.border;
+          el.querySelector('.title').style.color = theme.title;
+        } else {
+          el.innerHTML = `<div class="title">${node.title || ''}</div><div class="desc">${node.desc || ''}</div><div class="owner">${node.owner || ''}</div>`;
+          el.style.background = theme.bg;
+          el.style.borderColor = theme.border;
+          el.querySelector('.title').style.color = theme.title;
+        }
+
+        el.addEventListener('click', () => {
+          selectedId = node.id;
+          renderAll();
+          renderEditor();
+        });
+
+        nodesEl.appendChild(el);
+      });
+    }
+
+    function getPos(id) {
+      const n = data.nodes.find(v => v.id === id);
+      return { x: n.x * 10, y: n.y * 7 };
+    }
+
+    function renderEdges() {
+      const defs = svgEl.querySelector('defs').outerHTML;
+      const items = [];
+      data.edges.forEach(e => {
+        const p1 = getPos(e.from);
+        const p2 = getPos(e.to);
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const offset = 25;
+        const len = Math.hypot(dx, dy) || 1;
+        const sx = p1.x + (dx / len) * offset;
+        const sy = p1.y + (dy / len) * offset;
+        const ex = p2.x - (dx / len) * offset;
+        const ey = p2.y - (dy / len) * offset;
+        items.push(`<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"></line>`);
+        if (e.label) {
+          const mx = (sx + ex) / 2;
+          const my = (sy + ey) / 2;
+          items.push(`<rect x="${mx - 22}" y="${my - 11}" width="44" height="18" rx="6" fill="#fff" opacity="0.9"></rect>`);
+          items.push(`<text x="${mx}" y="${my + 2}" text-anchor="middle" font-size="11" fill="#334155">${e.label}</text>`);
+        }
+      });
+      svgEl.innerHTML = defs + items.join('');
+    }
+
+    function renderEditor() {
+      const empty = document.getElementById('editorEmpty');
+      const form = document.getElementById('editorForm');
+      if (!selectedId) {
+        empty.style.display = 'block';
+        form.style.display = 'none';
+        return;
+      }
+      const node = data.nodes.find(n => n.id === selectedId);
+      if (!node) return;
+      empty.style.display = 'none';
+      form.style.display = 'block';
+
+      const title = document.getElementById('fTitle');
+      const desc = document.getElementById('fDesc');
+      const owner = document.getElementById('fOwner');
+      const theme = document.getElementById('fTheme');
+
+      theme.innerHTML = Object.entries(themes).map(([k, t]) => `<option value="${k}">${t.name}</option>`).join('');
+      title.value = node.title;
+      desc.value = node.desc;
+      owner.value = node.owner;
+      theme.value = node.theme;
+
+      title.oninput = () => { node.title = title.value; renderNodes(); };
+      desc.oninput = () => { node.desc = desc.value; renderNodes(); };
+      owner.oninput = () => { node.owner = owner.value; renderNodes(); };
+      theme.onchange = () => { node.theme = theme.value; renderNodes(); };
+    }
+
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1400);
+    }
+
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      toast('저장되었습니다.');
+    }
+    function load() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return toast('저장된 데이터가 없습니다.');
+      data = JSON.parse(raw);
+      selectedId = null;
+      renderAll();
+      renderEditor();
+      toast('불러왔습니다.');
+    }
+    function reset() {
+      if (!confirm('초기 데이터로 복원할까요?')) return;
+      data = JSON.parse(JSON.stringify(defaults));
+      selectedId = null;
+      renderAll();
+      renderEditor();
+      toast('초기화되었습니다.');
+    }
+
+    function downloadPng() {
+      alert('외부 라이브러리 없이 HTML 레이어를 완전한 PNG로 렌더링하는 기능은 브라우저 제약이 큽니다.\n대신 인쇄(또는 PDF 저장) 기능을 이용해 주세요.');
+    }
+
+    function renderAll() {
+      renderNodes();
+      renderEdges();
+    }
+
+    document.getElementById('btnSave').onclick = save;
+    document.getElementById('btnLoad').onclick = load;
+    document.getElementById('btnReset').onclick = reset;
+    document.getElementById('btnDownload').onclick = downloadPng;
+    document.getElementById('btnPrint').onclick = () => window.print();
+
+    renderLegend();
+    renderAll();
+    renderEditor();
+  </script>
+</body>
+</html>
